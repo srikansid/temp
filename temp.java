@@ -1,171 +1,60 @@
-package gov.faa.uastrust.auth;
+package gov.faa.uastrust.config;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Pattern;
+import java.util.HashMap;
+import java.util.Map;
 
-import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.GenericFilterBean;
-
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
-
-@Slf4j
-@Component
-public class UasTrustFilter extends GenericFilterBean {
+public class UasTrustContext {
 	
+	private static final ThreadLocal<Map<String, String>> CONTEXT = ThreadLocal.withInitial(HashMap::new);
+	private static final String USER_NAME = "UserName";
+	private static final String USER_ROLE = "UserRole";
+	private static final String USER_TYPE = "UserType";
+	private static final String USER_IP_ADDRESS = "UserIpAddress";
+	private static final String USER_HOST_NAME = "UserHostName";
 	
-	static final List<String> NO_AUTH_PATHS = new ArrayList<>();
-	
-	static final List<String> EXTERNAL_REG_AUTH_PATHS = new ArrayList<>();
-	
-	static final List<String> EXTERNAL_AUTH_PATHS = new ArrayList<>();
-	
-	static {
-		//No Authentication paths
-		NO_AUTH_PATHS.add("/auth/extconfig");
-		NO_AUTH_PATHS.add("/auth/login/callback");
-		NO_AUTH_PATHS.add("/auth/logout");
-		NO_AUTH_PATHS.add("/auth/login");
-		NO_AUTH_PATHS.add("/api/v1/health_check/probe");
-		
-		//Valid token but user not needed in UASTrust DB - this is to handle registration
-		EXTERNAL_REG_AUTH_PATHS.add("/api/v1/searchUser");
-		EXTERNAL_REG_AUTH_PATHS.add("/api/v1/searchTestAuthority");
-		EXTERNAL_REG_AUTH_PATHS.add("/api/v1/registerUser");
-		
-		//Valid token and user must be there in UASTrust DB
-		EXTERNAL_AUTH_PATHS.add("/api/v1/testAuthorities/[A-Z]{4}/tokens");
-		EXTERNAL_AUTH_PATHS.add("/api/v1/extLoginSuccess");
-		
-		//All other internal paths has to go thorough internal jwt validation
-		
+	private static void setAttribute(String attributeName, String attributeValue) {
+		CONTEXT.get().put(attributeName, attributeValue);
 	}
 	
-	@Autowired
-	OktaJwtValidator oktaJwtValidator;
-	
-	@Autowired
-	CustomJwtCreatorAndValidator customJwtCreatorAndValidator;
-	
+	public static String getUserName() {
+		return CONTEXT.get().get(USER_NAME);
+	}
 
-	@Override
-	public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
-			throws IOException, ServletException {
-		HttpServletRequest request = (HttpServletRequest) req;
-		HttpServletResponse response = (HttpServletResponse) res;
-		
-		if(!request.getRequestURI().contains("health_check")) {
-			log.info("Client -- "+request.getHeader("client")+ ",  Path -- "+request.getRequestURI());
-		}
+	public static void setUserName(String userNameValue) {
+		setAttribute(USER_NAME, userNameValue);
+	}
+	
+	public static String getUserRole() {
+		return CONTEXT.get().get(USER_NAME);
+	}
 
-		
-		if(isNoAuthPath(request.getRequestURI())) {
-			
-			chain.doFilter(request, response);
-			
-		} else if(request.getHeader("client") != null && request.getHeader("client").equals("external")) {
-			
-			handleExternalAppSecurity(request, response,chain);
-			
-		} else if(request.getHeader("client") != null && request.getHeader("client").equals("internal")) {
-			
-			handleInternalAppSecurity(request, response, chain );
-			
-		}  
-		
+	public static void setUserRole(String userRoleValue) {
+		setAttribute(USER_ROLE, userRoleValue);
 	}
 	
-	private void handleExternalAppSecurity(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws IOException, ServletException {
-		
-		try {
-			
-			String token = extractTokenFromRequest(request);
-			
-			if(EXTERNAL_REG_AUTH_PATHS.contains(request.getRequestURI()) && oktaJwtValidator.validate(token, false)) {
+	public static String getUserType() {
+		return CONTEXT.get().get(USER_NAME);
+	}
 
-				chain.doFilter(request, response);
-				
-			} else if(checkExternalAuthPath(request.getRequestURI()) && oktaJwtValidator.validate(token, true)) {
+	public static void setUserType(String userTypeValue) {
+		setAttribute(USER_TYPE, userTypeValue);
+	}
 
-				chain.doFilter(request, response);
-					
-			} else {
-				log.error("Not a valid path === ");	
-				response.sendError(HttpServletResponse.SC_NOT_ACCEPTABLE, "Not a valid external path === ");
-			}
-			
-		} catch (Exception e) {
-			log.error("JWT validation error === ");		
-			response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token validation failed == ");
-		}
-		
+	public static String getUserIpAddress() {
+		return CONTEXT.get().get(USER_IP_ADDRESS);
 	}
-	
-	private void handleInternalAppSecurity(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws IOException, ServletException {
-		String token = extractTokenFromRequest(request);
-		
-		try {
-			
-			if(customJwtCreatorAndValidator.validateJWTToken(token)){
-				chain.doFilter(request, response);
-			} else {
-				clearTokenAndSendError(response);
-			}
-		} catch (Exception e) {
-			clearTokenAndSendError(response);
-		}
-		
-	}
-	
-	private boolean isNoAuthPath(String url) {
-		
-		return NO_AUTH_PATHS.contains(url);
-		
-	}
-	
-	private void clearTokenAndSendError(HttpServletResponse response) {
-		try {
-			log.error("Token validation failed == ");	
-    		Cookie ck = new Cookie("jwt", null);
-    		ck.setPath("/");
-    		response.addCookie(ck);
-			response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token validation failed == ");
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
 
+	public static void setUserIpAddress(String userIpAddressValue) {
+		setAttribute(USER_IP_ADDRESS, userIpAddressValue);
+	}
+
+	public static String getUserHostName() {
+		return CONTEXT.get().get(USER_HOST_NAME);
+	}
+
+	public static void setUserHostName(String userHostNameValue) {
+		setAttribute(USER_HOST_NAME, userHostNameValue);
 	}
 	
-	private String extractTokenFromRequest(HttpServletRequest request) {
-		String token = request.getHeader("Authorization");
-		if(StringUtils.isNotBlank(token) && token.contains("Bearer")) {
-			token = token.substring(7);
-		} 
-		
-		return token;
-	}
-	
-	private boolean checkExternalAuthPath(String path) {
-		
-		for (int i = 0; i < EXTERNAL_AUTH_PATHS.size(); i++) {
-			boolean b = Pattern.compile(EXTERNAL_AUTH_PATHS.get(i)).matcher(path).matches();
-			if(b) {
-				return true;
-			}
-		}
-		
-		return false;
-		
-	}
 
 }
